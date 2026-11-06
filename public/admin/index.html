@@ -1,0 +1,88 @@
+<!doctype html><html lang="es"><head><meta charset="utf-8">
+<meta name="viewport" content="width=device-width,initial-scale=1,viewport-fit=cover">
+<meta name="robots" content="noindex"><title>Administrar catálogo</title>
+<style>
+:root{--bg:#fdf0f2;--fg:#3b1f3f;--mut:#8a6b8c;--card:#fff;--ac:#a3194f;color-scheme:light dark}
+@media(prefers-color-scheme:dark){:root{--bg:#1d1020;--fg:#f6e4ea;--mut:#b99bbd;--card:#2a1830;--ac:#ff7aa8}}
+*{box-sizing:border-box}body{margin:0;background:var(--bg);color:var(--fg);font:16px/1.4 system-ui,sans-serif;padding:0 14px 40px}
+h1{font:600 1.5rem Georgia,serif;margin:20px 0 12px}
+input,button{font:inherit;padding:12px;border-radius:12px;border:1px solid var(--mut);background:var(--card);color:var(--fg);width:100%;margin-bottom:8px}
+button{background:var(--ac);color:#fff;border:0;font-weight:600}button.o{background:none;color:var(--fg);border:1px solid var(--mut);width:auto;margin:0;padding:8px 12px}
+.ref{color:var(--ac)}
+small{color:var(--mut);display:block;min-height:1.4em;margin-bottom:8px}
+.r{display:flex;gap:10px;align-items:center;background:var(--card);border-radius:14px;padding:8px;margin-bottom:8px}
+.a{display:flex;flex-direction:column;gap:6px}button.x{color:#d33;border-color:#d33}.r img{width:56px;height:56px;border-radius:10px;object-fit:cover;background:var(--bg)}.r div{flex:1}.off{opacity:.55}
+</style></head><body>
+<h1>Administrar catálogo</h1>
+<div id="lock"><input id="pin" type="password" placeholder="PIN" autocomplete="current-password"><button id="go">Entrar</button><small id="le"></small></div>
+<div id="app" hidden>
+<form id="f"><input id="n" placeholder="Nombre del producto" required><small id="h"></small>
+<input id="p" placeholder="Precio (25000, 25.000 o 25k)" inputmode="decimal" required>
+<input id="ph" type="file" accept="image/*"><button>Guardar producto</button><small id="st"></small></form>
+<input id="sq" type="search" placeholder="Buscar por ref o nombre" aria-label="Buscar por ref o nombre">
+<div id="l"></div></div>
+<script>
+let pin = sessionStorage.pin || "", list = [], editId = null;
+const api = async (p, body) => {
+  const r = await fetch("/api/admin/" + p, {method: body ? "POST" : "GET", headers: {"x-admin-pin": pin, "content-type": "application/json"}, body: body && JSON.stringify(body)});
+  if (!r.ok) throw new Error(await r.text()); return r.json();
+};
+const keyOf = s => s.normalize("NFD").replace(/[\u0300-\u036f]/g, "").toLowerCase().replace(/\s+/g, " ").trim();
+const hit = p => { const k = keyOf(sq.value); return !k || keyOf(p.name).includes(k) || keyOf(p.ref || "").includes(k); };
+const price = v => { const m = v.toLowerCase().replace(/\s/g, "").match(/^([\d.,]+)(k|mil)?$/); if (!m) return NaN;
+  const x = parseFloat(m[1].replace(/\./g, "").replace(",", ".")); return Math.round(m[2] ? x * 1000 : x); };
+const cop = n => new Intl.NumberFormat("es-CO", {style:"currency", currency:"COP", maximumFractionDigits:0}).format(n);
+const esc = s => s.replace(/[&<>"]/g, c => ({"&":"&amp;","<":"&lt;",">":"&gt;",'"':"&quot;"}[c]));
+const thumb = u => u ? u.replace("/upload/", "/upload/f_auto,q_auto,w_120/") : "";
+async function load() {
+  try { list = await api("list"); sessionStorage.pin = pin; lock.hidden = true; app.hidden = false; draw(); }
+  catch (e) { lock.hidden = false; app.hidden = true; le.textContent = e.message ? "Error: " + e.message : "Sin conexión."; }
+}
+function draw() {
+  l.innerHTML = list.map((p, i) => !hit(p) ? "" : `<div class="r ${p.active ? "" : "off"}"><img src="${thumb(p.image_url)}" alt=""><div data-e="${i}"><b>${esc(p.name)}</b><br><b class="ref">${esc(p.ref || "")}</b> · ${cop(p.price)}${p.active ? "" : " · agotado"}</div><span class="a"><button class="o" data-t="${i}">${p.active ? "Agotar" : "Activar"}</button><button class="o x" data-x="${i}">Borrar</button></span></div>`).join("") || (list.length ? "Sin resultados." : "Aún no hay productos.");
+}
+l.onclick = async e => {
+  const t = e.target.closest("[data-t]"), d = e.target.closest("[data-e]"), x = e.target.closest("[data-x]");
+  try {
+    if (t) { const p = list[t.dataset.t]; await api("toggle", {id: p.id, active: !p.active}); list = await api("list"); draw(); }
+    else if (x) {
+      const p = list[x.dataset.x];
+      if (!confirm(`¿Borrar "${p.name}"? No se puede deshacer.`)) return;
+      const r = await api("delete", {id: p.id}); list = await api("list");
+      if (editId === p.id) { editId = null; f.reset(); }
+      hint(); draw(); st.textContent = r && r.foto === false ? "Borrado, pero la foto no se pudo quitar de Cloudinary." : "Borrado.";
+    }
+    else if (d) { const p = list[d.dataset.e]; editId = p.id; n.value = p.name; pr.value = p.price; hint(); scrollTo(0, 0); }
+  } catch (err) { st.textContent = "Error: " + err.message; scrollTo(0, 0); }
+};
+const pr = p;
+const hint = () => { const x = list.find(q => keyOf(q.name) === keyOf(n.value)); h.textContent = editId ? `Editando ${(list.find(z => z.id === editId) || {}).ref || ""}: puedes cambiar nombre, precio o foto.` : x ? "Ya existe: se actualizará y quedará disponible." : ""; };
+n.oninput = hint;
+sq.oninput = draw;
+async function shrink(f) {
+  const bm = await createImageBitmap(f), k = Math.min(1, 900 / Math.max(bm.width, bm.height));
+  const c = document.createElement("canvas"); c.width = bm.width * k; c.height = bm.height * k;
+  c.getContext("2d").drawImage(bm, 0, 0, c.width, c.height);
+  return new Promise(r => c.toBlob(r, "image/jpeg", .82));
+}
+f.onsubmit = async e => {
+  e.preventDefault();
+  const v = price(pr.value); if (!(v > 0)) { st.textContent = "El precio no se entiende. Usa 25000, 25.000 o 25k."; return; }
+  try {
+    let image_url = null;
+    if (ph.files[0]) {
+      st.textContent = "Subiendo foto…";
+      const s = await api("sign"), fd = new FormData();
+      fd.append("file", await shrink(ph.files[0])); fd.append("api_key", s.key); fd.append("timestamp", s.timestamp); fd.append("folder", s.folder); fd.append("signature", s.signature);
+      const r = await fetch(`https://api.cloudinary.com/v1_1/${s.cloud}/image/upload`, {method: "POST", body: fd}), j = await r.json();
+      if (!j.secure_url) throw new Error("No se pudo subir la foto");
+      image_url = j.secure_url;
+    }
+    st.textContent = "Guardando…";
+    await api("save", {id: editId, name: n.value, price: v, image_url});
+    list = await api("list"); editId = null; draw(); f.reset(); h.textContent = ""; st.textContent = "Guardado.";
+  } catch (err) { st.textContent = "Error: " + err.message; }
+};
+go.onclick = () => { pin = document.getElementById("pin").value; load(); };
+if (pin) load();
+</script></body></html>

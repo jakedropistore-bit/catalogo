@@ -1,0 +1,80 @@
+<!doctype html><html lang="es"><head><meta charset="utf-8">
+<meta name="viewport" content="width=device-width,initial-scale=1,viewport-fit=cover">
+<title>Catálogo</title>
+<style>
+:root{--bg:#fdf0f2;--fg:#3b1f3f;--mut:#8a6b8c;--card:#fff;--ac:#a3194f;color-scheme:light dark}
+@media(prefers-color-scheme:dark){:root{--bg:#1d1020;--fg:#f6e4ea;--mut:#b99bbd;--card:#2a1830;--ac:#ff7aa8}}
+*{box-sizing:border-box}
+body{margin:0;background:var(--bg);color:var(--fg);font:16px/1.4 system-ui,sans-serif;padding:0 14px 110px}
+h1{font:600 1.6rem/1.1 Georgia,serif;margin:20px 0 12px}
+#s{width:100%;padding:12px 14px;border-radius:12px;border:1px solid var(--mut);background:var(--card);color:var(--fg);font:inherit}
+#g{display:grid;grid-template-columns:repeat(auto-fill,minmax(150px,1fr));gap:14px;margin-top:14px}
+.c{background:var(--card);border-radius:16px;overflow:hidden}
+.c img{display:block;width:100%;aspect-ratio:1;object-fit:cover;background:var(--bg)}
+.i{padding:10px 12px 12px}.n{font-weight:600}.p{font:1.05rem Georgia,serif;color:var(--ac)}
+.q{display:flex;align-items:center;justify-content:space-between;margin-top:8px}
+.q button{width:40px;height:40px;border-radius:50%;border:0;background:var(--ac);color:#fff;font-size:22px}
+.q button:focus-visible,#w:focus-visible{outline:3px solid var(--fg);outline-offset:2px}
+#b{position:fixed;left:0;right:0;bottom:0;padding:12px 14px calc(12px + env(safe-area-inset-bottom));background:var(--bg);display:none}
+#ver{display:block;width:100%;border:0;border-radius:14px;padding:15px;background:var(--ac);color:#fff;font:700 1rem system-ui,sans-serif}
+#w{display:block;text-align:center;background:#1fa855;color:#fff;font-weight:700;padding:15px;border-radius:14px;text-decoration:none;margin-top:12px}
+#clr{display:block;margin:10px auto 0;border:0;background:none;color:var(--mut);font:inherit;padding:8px;text-decoration:underline}
+#ver:focus-visible,#w:focus-visible,#clr:focus-visible,#cls:focus-visible{outline:3px solid var(--fg);outline-offset:2px}
+dialog{margin:auto 0 0;width:100%;max-width:none;max-height:85vh;overflow:auto;border:0;border-radius:18px 18px 0 0;background:var(--card);color:var(--fg);padding:16px 14px calc(16px + env(safe-area-inset-bottom))}
+dialog::backdrop{background:rgba(0,0,0,.5)}
+.h{display:flex;justify-content:space-between;align-items:center;font:600 1.2rem Georgia,serif;margin-bottom:6px}
+#cls{width:40px;height:40px;border:0;background:none;color:var(--fg);font-size:20px}
+.r{display:flex;justify-content:space-between;align-items:center;gap:10px;padding:10px 0;border-bottom:1px solid var(--bg)}
+.r .q{margin:0;gap:10px}
+#tot{font-weight:700;text-align:right;margin-top:12px}
+.rf{color:var(--mut);font-size:.8rem}
+</style></head><body>
+<h1 id="t">Catálogo</h1>
+<input id="s" type="search" placeholder="Buscar por nombre o ref" aria-label="Buscar por nombre o ref">
+<div id="g">Cargando…</div>
+<div id="b"><button id="ver" type="button">Ver pedido</button></div>
+<dialog id="dlg" aria-label="Tu pedido"><div class="h"><span>Tu pedido</span><button id="cls" type="button" aria-label="Cerrar">✕</button></div>
+<div id="lst"></div><div id="tot"></div>
+<a id="w" href="#">Enviar pedido por WhatsApp</a>
+<button id="clr" type="button">Vaciar pedido</button></dialog>
+<script>
+const WA = "573174129474", STORE = "VELUMNIA";
+t.textContent = STORE;
+const cop = n => new Intl.NumberFormat("es-CO", {style:"currency", currency:"COP", maximumFractionDigits:0}).format(n);
+const esc = s => s.replace(/[&<>"]/g, c => ({"&":"&amp;","<":"&lt;",">":"&gt;",'"':"&quot;"}[c]));
+const pic = u => u ? u.replace("/upload/", "/upload/f_auto,q_auto,w_500/") : "";
+let items = [], cart = {};
+try { cart = JSON.parse(localStorage.cart || "{}"); } catch {}
+const keep = () => { try { localStorage.cart = JSON.stringify(cart); } catch {} };
+function bar() {
+  const l = items.filter(p => cart[p.id]);
+  const n = l.reduce((a, p) => a + cart[p.id], 0);
+  const total = l.reduce((a, p) => a + p.price * cart[p.id], 0);
+  b.style.display = l.length ? "block" : "none";
+  if (!l.length && dlg.open) dlg.close();
+  ver.textContent = `Ver pedido (${n}) · ${cop(total)}`;
+  lst.innerHTML = l.map(p => `<div class="r"><div>${esc(p.name)}<br><span class="p">${cop(p.price * cart[p.id])}</span></div><div class="q"><button data-i="${p.id}" data-d="-1" aria-label="Quitar uno">−</button><b>${cart[p.id]}</b><button data-i="${p.id}" data-d="1" aria-label="Agregar uno">+</button></div></div>`).join("");
+  tot.textContent = `Total: ${cop(total)}`;
+  const msg = `Hola ${STORE}, quiero pedir:\n` + l.map(p => `${cart[p.id]}x ${p.name}${p.ref ? ` - Ref ${p.ref}` : ""} (${cop(p.price)})`).join("\n") + `\nTotal: ${cop(total)}`;
+  w.href = `https://wa.me/${WA}?text=${encodeURIComponent(msg)}`;
+}
+function draw() {
+  const q = s.value.toLowerCase();
+  const l = items.filter(p => p.name.toLowerCase().includes(q) || (p.ref || "").toLowerCase().includes(q));
+  g.innerHTML = l.length ? l.map(p => `<div class="c"><img loading="lazy" src="${pic(p.image_url)}" alt=""><div class="i"><div class="n">${esc(p.name)}</div><div class="rf">Ref ${esc(p.ref || "")}</div><div class="p">${cop(p.price)}</div><div class="q"><button data-i="${p.id}" data-d="-1" aria-label="Quitar uno">−</button><b>${cart[p.id] || 0}</b><button data-i="${p.id}" data-d="1" aria-label="Agregar uno">+</button></div></div></div>`).join("") : "No hay productos que coincidan.";
+  bar();
+}
+const chg = e => {
+  const x = e.target.closest("button[data-i]"); if (!x) return;
+  const i = x.dataset.i; cart[i] = Math.max(0, (cart[i] || 0) + Number(x.dataset.d)); keep(); draw();
+};
+const empty = () => { cart = {}; keep(); draw(); };
+g.onclick = chg; lst.onclick = chg;
+ver.onclick = () => dlg.showModal();
+cls.onclick = () => dlg.close();
+dlg.onclick = e => { if (e.target === dlg) dlg.close(); };
+clr.onclick = empty;
+w.onclick = () => setTimeout(() => { empty(); dlg.close(); }, 1000);
+s.oninput = draw;
+fetch("/api/products").then(r => r.json()).then(d => { items = d; draw(); }).catch(() => g.textContent = "No se pudo cargar el catálogo. Intenta de nuevo.");
+</script></body></html>
